@@ -1,0 +1,45 @@
+graph LR
+    subgraph Frontend["React 18 + Vite"]
+        UI[Components]
+        APIClient[api.js axios client]
+    end
+
+    subgraph Backend["Express.js API"]
+        ROUTES[Routes<br/>auth · incidents · health]
+        MW[Middleware<br/>auth · rateLimiter · errorHandler]
+        CTRL[Controllers]
+        SVC[Services<br/>authService · incidentService]
+        PRISMA[Prisma ORM]
+        UTILS[Utils<br/>logger · metrics]
+    end
+
+    subgraph Data["Persistence"]
+        PG[(PostgreSQL 16)]
+        S3B[(S3 attachments)]
+    end
+
+    subgraph Sec["Security Sidecars"]
+        SECRETS[Secrets Manager SDK]
+        WAF[WAF rules<br/>OWASP CRS]
+    end
+
+    subgraph Obs["Observability"]
+        METRICS[metrics endpoint]
+        LOGS[Structured JSON logs]
+    end
+
+    UI --> APIClient
+    APIClient -->|HTTPS via ALB| WAF
+    WAF --> ROUTES
+    ROUTES --> MW
+    MW --> CTRL
+    CTRL --> SVC
+    SVC --> PRISMA
+    PRISMA --> PG
+    SVC --> S3B
+    SVC --> SECRETS
+    SVC --> UTILS
+    UTILS --> METRICS
+    UTILS --> LOGS
+    METRICS -.scraped by.-> PROM[Prometheus]
+    LOGS -.shipped to.-> CWL[CloudWatch Logs]

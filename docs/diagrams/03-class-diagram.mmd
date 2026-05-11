@@ -1,0 +1,85 @@
+%%
+%% SecureTrack — UML Class Diagram (application layer)
+%%
+%% Mirrors the MCD on the data side, plus the service-layer classes
+%% (AuthService, IncidentService) and cross-cutting concerns
+%% (MetricsCollector). Keeps to the layered architecture pattern used in
+%% app/backend/src/{controllers,services,middleware,utils}/.
+%%
+classDiagram
+    class User {
+        +UUID id
+        +string email
+        -string passwordHash
+        +string fullName
+        +Role role
+        +Date lastLogin
+        +login(password) Token
+        +hasPermission(action) bool
+    }
+    class Role {
+        +UUID id
+        +RoleName name
+        +List~Permission~ permissions
+    }
+    class Incident {
+        +UUID id
+        +string title
+        +string description
+        +Severity severity
+        +Status status
+        +User reporter
+        +List~Comment~ comments
+        +List~Attachment~ attachments
+        +addComment(user, text) Comment
+        +changeStatus(newStatus, actor) void
+    }
+    class Comment {
+        +UUID id
+        +User author
+        +string body
+        +Date createdAt
+    }
+    class Attachment {
+        +UUID id
+        +string s3Key
+        +string mimeType
+        +int sizeBytes
+        +presignedUrl(ttl) URL
+    }
+    class AuditLog {
+        +UUID id
+        +User actor
+        +string action
+        +string entityType
+        +UUID entityId
+        +JSON diff
+        +Date occurredAt
+        +record(event) void
+    }
+    class AuthService {
+        +register(dto) User
+        +login(email, pwd) Token
+        +verifyToken(token) User
+        -hashPassword(pwd) string
+    }
+    class IncidentService {
+        +create(dto, reporter) Incident
+        +list(filter) List~Incident~
+        +update(id, dto, actor) Incident
+    }
+    class MetricsCollector {
+        +incrementCounter(name) void
+        +observeHistogram(name, val) void
+        +metricsEndpoint() string
+    }
+
+    User "1" --> "1" Role
+    Incident "1" --> "*" Comment
+    Incident "1" --> "*" Attachment
+    Incident "*" --> "1" User : reporter
+    Comment "*" --> "1" User : author
+    AuditLog "*" --> "1" User : actor
+    AuthService ..> User : creates
+    IncidentService ..> Incident : manages
+    IncidentService ..> AuditLog : writes

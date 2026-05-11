@@ -1,0 +1,72 @@
+graph TB
+    subgraph Dev["Developer Workstation"]
+        IDE[IDE + pre-commit hooks]
+    end
+
+    subgraph GH["GitHub"]
+        REPO[(Repo<br/>main · develop · hardened)]
+        ACT[GitHub Actions Runners]
+        GHCR[(GHCR<br/>backup registry)]
+    end
+
+    subgraph AWS["AWS Cloud — eu-west-3"]
+        subgraph VPC["VPC 10.0.0.0/16"]
+            subgraph PUB["Public Subnets"]
+                ALB[Application LB + WAF]
+            end
+            subgraph PRIV["Private Subnets"]
+                ECS_F[ECS Fargate Service]
+                ECS_BACK[Fargate Task<br/>Backend]
+                ECS_FRONT[Fargate Task<br/>Frontend]
+            end
+            subgraph DB_SUB["DB Subnets"]
+                RDS[(RDS PostgreSQL 16<br/>Multi-AZ optional)]
+            end
+        end
+        ECR[(Amazon ECR<br/>native scanning)]
+        SM[Secrets Manager]
+        S3[(S3<br/>SBOM · ZAP · attachments)]
+        CWL[CloudWatch Logs]
+        CWM[CloudWatch Metrics]
+        INSP[Inspector v2]
+        GD[GuardDuty]
+        R53[Route 53]
+        ACM[ACM Certificate]
+        OIDC[IAM OIDC Provider]
+    end
+
+    subgraph SIGSTORE["Sigstore Public Good"]
+        FULCIO[Fulcio CA]
+        REKOR[Rekor Transparency Log]
+    end
+
+    subgraph OBS["Observability Plane"]
+        PROM[Prometheus]
+        GRAF[Grafana]
+    end
+
+    IDE -->|git push| REPO
+    REPO -->|webhook| ACT
+    ACT -->|OIDC AssumeRole| OIDC
+    ACT -->|push image| ECR
+    ACT -->|push image| GHCR
+    ACT -->|sign| FULCIO
+    FULCIO --> REKOR
+    ACT -->|deploy| ECS_F
+    ECS_F --> ECS_BACK
+    ECS_F --> ECS_FRONT
+    ALB --> ECS_FRONT
+    ALB --> ECS_BACK
+    R53 --> ALB
+    ACM --> ALB
+    ECS_BACK --> RDS
+    ECS_BACK --> SM
+    ECS_BACK --> S3
+    ECS_BACK --> CWL
+    ECS_BACK --> CWM
+    INSP -.continuous.-> ECS_BACK
+    GD -.threats.-> ECS_BACK
+    PROM -->|scrape /metrics| ECS_BACK
+    GRAF --> PROM
+    GRAF -->|datasource| CWM
+    ACT -->|ZAP baseline| ALB

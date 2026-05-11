@@ -1,0 +1,33 @@
+sequenceDiagram
+    autonumber
+    actor U as Reporter
+    participant FE as React Frontend
+    participant CDN as CloudFront (optional)
+    participant ALB as ALB + WAF
+    participant API as Backend (ECS Task)
+    participant SM as Secrets Manager
+    participant DB as RDS PostgreSQL
+    participant S3 as S3 Bucket
+    participant CW as CloudWatch
+    participant PR as Prometheus
+
+    U->>FE: Fill incident form and attach file
+    FE->>CDN: PUT /api/incidents over HTTPS
+    CDN->>ALB: forward
+    ALB->>ALB: WAF rules check (SQLi, XSS)
+    ALB->>API: POST /api/incidents
+    API->>API: JWT middleware verify
+    API->>SM: get DB credentials (cached)
+    SM-->>API: credentials
+    API->>DB: BEGIN tx, INSERT incident, INSERT audit_log
+    DB-->>API: incident id
+    API->>S3: request presigned PUT URL
+    S3-->>API: URL
+    API->>DB: INSERT attachment row, COMMIT
+    DB-->>API: OK
+    API->>CW: structured log CREATE action
+    API->>PR: incident_created_total counter increment
+    API-->>FE: 201 Created with presigned URL
+    FE->>S3: PUT file directly from browser
+    S3-->>FE: 200
+    FE-->>U: success toast

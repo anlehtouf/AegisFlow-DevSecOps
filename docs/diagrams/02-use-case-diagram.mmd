@@ -1,0 +1,58 @@
+graph TB
+    subgraph Actors["Actors"]
+        REP((Reporter))
+        ADM((Admin))
+        AUD((Auditor))
+        DEV((Developer))
+        SEC((Security<br/>Engineer))
+        PIPE((CI/CD<br/>Pipeline))
+        AWS_SYS((AWS<br/>Services))
+    end
+
+    subgraph App["SecureTrack — Application"]
+        UC1[Register / Login]
+        UC2[Create Incident]
+        UC3[List / Filter Incidents]
+        UC4[Comment on Incident]
+        UC5[Update Incident Status]
+        UC6[Manage Users and Roles]
+        UC7[View Audit Log]
+        UC8[Upload Attachment to S3]
+    end
+
+    subgraph Plat["SecureTrack — DevSecOps Platform"]
+        UC9[Push Code]
+        UC10[Trigger Pipeline]
+        UC11[Run Security Scans]
+        UC12[Enforce Quality Gates]
+        UC13[Sign and Push Image]
+        UC14[Deploy to ECS Fargate]
+        UC15[Run DAST]
+        UC16[View Security Dashboard]
+        UC17[Verify Image Signature]
+        UC18[Detect Runtime Threats]
+    end
+
+    REP --> UC1
+    REP --> UC2
+    REP --> UC3
+    REP --> UC4
+    REP --> UC8
+    ADM --> UC1
+    ADM --> UC5
+    ADM --> UC6
+    AUD --> UC7
+    AUD --> UC16
+
+    DEV --> UC9
+    UC9 -.triggers.-> UC10
+    PIPE --> UC10
+    PIPE --> UC11
+    PIPE --> UC12
+    PIPE --> UC13
+    PIPE --> UC14
+    PIPE --> UC15
+    SEC --> UC16
+    SEC --> UC17
+    AWS_SYS --> UC18
+    AWS_SYS -.feeds.-> UC11

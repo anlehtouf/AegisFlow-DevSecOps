@@ -1,0 +1,65 @@
+%%
+%% SecureTrack — UML Sequence: pipeline blocks a vulnerable commit (3 iters)
+%%
+%% This is THE money diagram for the defense:
+%%   - Iteration 1: Gitleaks blocks (V1, V2 hardcoded secrets)
+%%   - Iteration 2: Semgrep blocks (V3 SQL injection)
+%%   - Iteration 3: All gates green → SBOM + Cosign sign + ECS deploy + ZAP
+%%
+%% Each iteration corresponds to a real commit on the `hardened` branch, so the
+%% jury can replay the narrative from `git log --oneline`.
+%%
+sequenceDiagram
+    autonumber
+    actor Dev as Developer
+    participant Repo as GitHub Repo
+    participant GA as GitHub Actions
+    participant GL as Gitleaks
+    participant SG as Semgrep
+    participant SC as SonarCloud
+    participant TV as Trivy
+    participant HD as Hadolint
+    participant CT as Conftest/OPA
+    participant ECR as Amazon ECR
+    participant CO as Cosign + Fulcio
+    participant ECS as ECS Fargate
+    participant ZAP as OWASP ZAP
+
+    Note over Dev,ZAP: Iteration 1 — Secret detected
+    Dev->>Repo: git push (hardcoded secret + SQLi)
+    Repo->>GA: webhook trigger
+    GA->>GL: scan repo
+    GL-->>GA: 2 secrets found (V1, V2)
+    Note over GA: Gate 1 BLOCK
+    GA-->>Repo: PR check fail + comment
+
+    Note over Dev,ZAP: Iteration 2 — SAST catches SQLi
+    Dev->>Repo: push fix (remove secrets)
+    Repo->>GA: re-trigger
+    GA->>GL: scan
+    GL-->>GA: clean
+    GA->>SG: SAST
+    SG-->>GA: SQL injection (V3)
+    Note over GA: Gate 2 BLOCK
+
+    Note over Dev,ZAP: Iteration 3 — All green, deploy + verify
+    Dev->>Repo: push fix (parameterized query)
+    Repo->>GA: re-trigger
+    GA->>GL: ok
+    GA->>SG: ok
+    GA->>SC: code quality
+    SC-->>GA: quality gate passed
+    GA->>TV: SCA + image scan
+    TV-->>GA: no critical CVEs
+    GA->>HD: lint Dockerfile
+    HD-->>GA: ok
+    GA->>CT: policy validation
+    CT-->>GA: ok
+    GA->>ECR: docker push
+    GA->>CO: sign image (OIDC keyless)
+    CO-->>GA: signature + Rekor entry
+    GA->>ECS: aws ecs update-service
+    ECS-->>GA: deployment OK + healthcheck 200
+    GA->>ZAP: baseline scan against ALB URL
+    ZAP-->>GA: no high findings
+    GA-->>Repo: PR check pass + summary + Grafana link

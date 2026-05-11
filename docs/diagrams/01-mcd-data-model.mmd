@@ -1,0 +1,126 @@
+erDiagram
+    USER ||--o{ INCIDENT     : "reports"
+    USER ||--o{ COMMENT      : "writes"
+    USER ||--o{ AUDIT_LOG    : "triggers"
+    USER }o--|| ROLE         : "has"
+    INCIDENT ||--o{ COMMENT     : "receives"
+    INCIDENT ||--o{ ATTACHMENT  : "contains"
+    INCIDENT }o--|| SEVERITY    : "classified as"
+    INCIDENT }o--|| STATUS      : "in state"
+    INCIDENT ||--o{ AUDIT_LOG   : "tracked by"
+    BUILD ||--o{ SCAN_RESULT : "produces"
+    BUILD ||--|| SBOM        : "generates"
+    BUILD ||--|| SIGNATURE   : "signed by"
+    BUILD ||--o{ DEPLOYMENT  : "promoted to"
+    DEPLOYMENT }o--|| ENVIRONMENT : "targets"
+    SCAN_RESULT }o--|| TOOL  : "produced by"
+
+    USER {
+        uuid     id              PK
+        string   email           UK
+        string   password_hash
+        string   full_name
+        uuid     role_id         FK
+        datetime created_at
+        datetime last_login
+        bool     is_active
+    }
+    ROLE {
+        uuid   id    PK
+        string name  UK
+        string description
+    }
+    INCIDENT {
+        uuid     id           PK
+        string   title
+        text     description
+        uuid     reporter_id  FK
+        uuid     severity_id  FK
+        uuid     status_id    FK
+        string   location
+        datetime occurred_at
+        datetime created_at
+        datetime updated_at
+    }
+    SEVERITY {
+        uuid   id     PK
+        string label
+        int    weight
+    }
+    STATUS {
+        uuid   id    PK
+        string label
+    }
+    COMMENT {
+        uuid     id          PK
+        uuid     incident_id FK
+        uuid     author_id   FK
+        text     body
+        datetime created_at
+    }
+    ATTACHMENT {
+        uuid     id          PK
+        uuid     incident_id FK
+        string   s3_key
+        string   mime_type
+        int      size_bytes
+        datetime uploaded_at
+    }
+    AUDIT_LOG {
+        uuid     id          PK
+        uuid     actor_id    FK
+        string   action
+        string   entity_type
+        uuid     entity_id
+        json     diff
+        string   ip_address
+        datetime occurred_at
+    }
+    BUILD {
+        uuid     id           PK
+        string   commit_sha   UK
+        string   branch
+        string   image_digest
+        datetime built_at
+        string   status
+    }
+    SCAN_RESULT {
+        uuid     id              PK
+        uuid     build_id        FK
+        uuid     tool_id         FK
+        int      critical_count
+        int      high_count
+        int      medium_count
+        string   raw_report_url
+    }
+    TOOL {
+        uuid   id       PK
+        string name
+        string category
+    }
+    SBOM {
+        uuid   id        PK
+        uuid   build_id  FK
+        string format
+        string s3_key
+    }
+    SIGNATURE {
+        uuid     id                  PK
+        uuid     build_id            FK
+        string   cosign_bundle_url
+        string   fulcio_cert_subject
+        datetime signed_at
+    }
+    DEPLOYMENT {
+        uuid     id              PK
+        uuid     build_id        FK
+        uuid     environment_id  FK
+        datetime deployed_at
+        string   ecs_task_arn
+        string   status
+    }
+    ENVIRONMENT {
+        uuid   id         PK
+        string name
+        string aws_region
+    }

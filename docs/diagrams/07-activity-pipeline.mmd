@@ -1,0 +1,43 @@
+flowchart TD
+    A([Push or PR]) --> B[Checkout + Setup Node 20]
+    B --> C[Install deps + cache]
+    C --> D[Lint + Unit Tests + Coverage]
+    D --> E{Coverage >= 70%?}
+    E -- No --> X1([FAIL])
+    E -- Yes --> F[Gitleaks BLOCKING]
+    F --> G{Secrets?}
+    G -- Yes --> X1
+    G -- No --> H[Semgrep SAST BLOCKING]
+    H --> I{High or Critical?}
+    I -- Yes --> X1
+    I -- No --> J[SonarCloud BLOCKING]
+    J --> K{Quality Gate?}
+    K -- Fail --> X1
+    K -- Pass --> L[Trivy SCA and npm audit BLOCKING]
+    L --> M{Critical CVE?}
+    M -- Yes --> X1
+    M -- No --> N[Build Docker Image]
+    N --> O[Hadolint BLOCKING]
+    O --> P{Lint errors?}
+    P -- Yes --> X1
+    P -- No --> Q[Trivy Image Scan BLOCKING]
+    Q --> R{Critical CVE?}
+    R -- Yes --> X1
+    R -- No --> S[Syft SBOM]
+    S --> T[Cosign keyless sign and attest]
+    T --> U[Conftest OPA policies BLOCKING]
+    U --> V{Policy violation?}
+    V -- Yes --> X1
+    V -- No --> W[Push to ECR and GHCR]
+    W --> Y[Terraform plan and tfsec]
+    Y --> YY{IaC issues?}
+    YY -- Yes --> X1
+    YY -- No --> Z[Deploy to ECS Fargate]
+    Z --> AA[Health Check ALB]
+    AA --> BB{Healthy?}
+    BB -- No --> X2([Auto-rollback])
+    BB -- Yes --> CC[OWASP ZAP baseline]
+    CC --> DD[Push metrics to Prometheus]
+    DD --> EE[Cosign verify signature]
+    EE --> FF[Post summary to PR]
+    FF --> GG([SUCCESS])
