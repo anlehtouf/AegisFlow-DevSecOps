@@ -1,75 +1,61 @@
-# SecureTrack — DevSecOps CI/CD Pipeline
+# AegisFlow
 
-> A complete DevSecOps platform demonstrating automated vulnerability scanning,
-> policy enforcement, supply-chain security, and observability — built around a
-> deliberately vulnerable incident reporting application that is hardened
-> through pipeline-enforced remediation.
+> **DevSecOps with a built-in shield** — a 22-stage secure CI/CD pipeline with
+> AWS-native supply-chain enforcement, demonstrated end-to-end on a deliberately
+> vulnerable web application that is hardened through pipeline-enforced
+> remediation.
 
-[![CI Pipeline](https://img.shields.io/badge/CI-GitHub%20Actions-blue)](./.github/workflows/ci-pipeline.yml)
-[![Security](https://img.shields.io/badge/security-DevSecOps-green)]()
-[![Stack](https://img.shields.io/badge/stack-Node%20%7C%20React%20%7C%20Docker-lightgrey)]()
+[![CI Pipeline](https://github.com/anlehtouf/AegisFlow-DevSecOps/actions/workflows/ci-pipeline.yml/badge.svg)](./.github/workflows/ci-pipeline.yml)
+[![Security](https://img.shields.io/badge/security-DevSecOps-success)]()
+[![Signed](https://img.shields.io/badge/images-cosign%20signed-blueviolet)]()
+[![SBOM](https://img.shields.io/badge/SBOM-SPDX-orange)]()
+[![Cloud](https://img.shields.io/badge/cloud-AWS-ff9900)]()
+[![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC)]()
 [![License](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
+
+---
+
+## Why AegisFlow
+
+Most software organizations treat security as a post-development audit step.
+**AegisFlow inverts that model**: security is enforced at every stage of the
+delivery lifecycle, every build produces verifiable supply-chain artifacts, and
+every deployment lands on AWS infrastructure provisioned by signed, scanned
+Terraform.
+
+The platform is built around a deliberately vulnerable demo application —
+**SecureTrack**, an incident-reporting platform — that contains 15 intentional
+security flaws (`V1`–`V15`). The pipeline catches all of them and blocks
+deployment until each is remediated, producing a measurable
+**30+ critical/high findings → 0** narrative.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Architecture](#architecture)
 - [Security Controls](#security-controls)
 - [Pipeline Stages](#pipeline-stages)
+- [Cloud Infrastructure](#cloud-infrastructure)
 - [Tech Stack](#tech-stack)
 - [Quick Start](#quick-start)
 - [Demo Application](#demo-application)
-- [Vulnerability Demo](#vulnerability-demo)
-- [Security Findings — Before vs After](#security-findings--before-vs-after)
+- [Vulnerability Catalogue](#vulnerability-catalogue)
+- [Before vs After](#before-vs-after)
 - [Documentation](#documentation)
 - [Repository Structure](#repository-structure)
 - [License](#license)
 
 ---
 
-## Overview
-
-SecureTrack is an end-of-studies (PFE) project that implements a complete
-**Secure DevSecOps CI/CD Pipeline with Automated Vulnerability Scanning**.
-
-The project demonstrates:
-- Security integration at **every stage** of the software delivery lifecycle
-- **22 pipeline stages** with **5 enforced security gates**
-- **8 integrated security tools** covering secrets, SAST, SCA, containers, IaC, and DAST
-- **Supply-chain security** via SBOM generation and image signing
-- **Policy-as-code** for infrastructure governance
-- **Measurable security improvement** with before/after metrics
-- **Full observability** through Prometheus and Grafana dashboards
-
-The pipeline catches **15 intentional vulnerabilities** and blocks deployment
-until they are all remediated — demonstrating real-world DevSecOps enforcement.
-
----
-
 ## Architecture
 
-```
-Developer ──► GitHub ──► CI Pipeline (22 stages, 5 gates) ──► GHCR
-                              │                                 │
-                              │                                 │
-                     ┌────────┴────────┐                 ┌──────┴─────┐
-                     │ Security Tools   │                 │ Signed     │
-                     │                  │                 │ Image +    │
-                     │ • Gitleaks       │                 │ SBOM       │
-                     │ • Semgrep        │                 └──────┬─────┘
-                     │ • SonarCloud     │                        │
-                     │ • Trivy          │                        ▼
-                     │ • Hadolint       │                  Staging Env
-                     │ • Conftest       │                  (Docker Compose)
-                     │ • Syft           │                        │
-                     │ • Cosign         │                        ▼
-                     │ • OWASP ZAP      │                  DAST + Monitoring
-                     └──────────────────┘                  (ZAP + Grafana)
-```
+Full deployment topology — AWS-native, OIDC-federated, signed end-to-end:
 
-See [docs/architecture.md](./docs/architecture.md) for the full architecture.
+![Deployment Diagram](./docs/diagrams/06-deployment-diagram.png)
+
+Full diagram set: [`docs/diagrams/`](./docs/diagrams/) — MCD, use case, class,
+sequence (×2), deployment, activity, component.
 
 ---
 
@@ -77,48 +63,59 @@ See [docs/architecture.md](./docs/architecture.md) for the full architecture.
 
 | Control | Tool | Stage | Blocking |
 |---------|------|-------|----------|
-| Secret Detection | Gitleaks | Pre-build | Yes |
-| SAST | Semgrep | Build | Yes |
-| Code Quality | SonarCloud | Build | Yes |
-| Dependency Scan | Trivy + npm audit | Build | Yes |
-| Dockerfile Lint | Hadolint | Package | Yes |
-| Image Scan | Trivy | Package | Yes |
-| Policy-as-Code | Conftest/OPA | Package | Yes |
-| SBOM | Syft | Package | No |
-| Image Signing | Cosign (keyless) | Package | No |
+| Secret detection | Gitleaks | Pre-build | Yes |
+| SAST | Semgrep (+ custom rules) | Build | Yes |
+| Code quality | SonarCloud | Build | Yes |
+| Dependency scan | Trivy + npm audit | Build | Yes |
+| Dockerfile lint | Hadolint | Package | Yes |
+| Image scan | Trivy + ECR native | Package | Yes |
+| Policy-as-code | Conftest / OPA | Package | Yes |
+| IaC scan | tfsec | Infrastructure | Yes |
+| SBOM | Syft (SPDX) | Package | Advisory |
+| Image signing | Cosign keyless (OIDC) | Package | Advisory |
 | DAST | OWASP ZAP | Post-deploy | Advisory |
+| Runtime CVE | Amazon Inspector v2 | Runtime | Continuous |
+| Threat detection | Amazon GuardDuty | Runtime | Continuous |
+| L7 protection | AWS WAF (OWASP CRS) | Edge | Continuous |
 
-See [docs/security-controls.md](./docs/security-controls.md) for the full inventory.
+See [`docs/security-controls.md`](./docs/security-controls.md) for the full
+inventory with control IDs and compliance mapping.
 
 ---
 
 ## Pipeline Stages
 
-1. Source checkout
-2. Setup runtime (Node 20)
-3. Install dependencies
-4. Lint (ESLint + security plugin)
-5. Unit tests
-6. Coverage report
-7. **Secret scan (Gitleaks) — BLOCKING**
-8. **SAST (Semgrep) — BLOCKING**
-9. **Code quality (SonarCloud) — BLOCKING**
-10. **Dependency scan (Trivy + npm audit) — BLOCKING**
-11. Build Docker image
-12. **Dockerfile lint (Hadolint) — BLOCKING**
-13. **Container image scan (Trivy) — BLOCKING**
-14. SBOM generation (Syft)
-15. Image signing (Cosign keyless via OIDC)
-16. **Policy-as-code validation (Conftest) — BLOCKING**
-17. Push image to GHCR
-18. Deploy to staging
-19. Post-deployment health check
-20. DAST scan (OWASP ZAP baseline)
-21. Upload reports as artifacts
-22. Final decision summary posted to PR
+The CI/CD pipeline runs 22 stages with 5 explicit blocking gates:
+
+![Pipeline Activity Diagram](./docs/diagrams/07-activity-pipeline.png)
 
 See [`.github/workflows/ci-pipeline.yml`](./.github/workflows/ci-pipeline.yml)
-for the complete implementation.
+for the implementation.
+
+---
+
+## Cloud Infrastructure
+
+AegisFlow ships with a complete **Terraform module** that provisions the full
+AWS landing zone for the application:
+
+- **VPC** — three-tier subnets (public · private app · private DB) across two AZs
+- **ECS Fargate** — serverless container runtime, no node management
+- **ECR** — image registry with native vulnerability scanning
+- **RDS PostgreSQL 16** — encrypted at rest, no public access, automated backups
+- **ALB + AWS WAF** — L7 load balancing with OWASP Core Rule Set
+- **ACM + Route 53** — auto-renewed TLS certificates and DNS
+- **Secrets Manager** — DB credentials and JWT secret, IAM-scoped
+- **S3** — versioned, encrypted bucket for SBOMs, scan reports, attachments
+- **CloudWatch Logs + Metrics** — centralized observability
+- **GuardDuty + Inspector v2** — runtime threat detection and continuous CVE scanning
+- **IAM OIDC Provider** — GitHub Actions federation, **zero static AWS credentials**
+
+The Terraform code is itself scanned by [`tfsec`](https://aquasecurity.github.io/tfsec)
+in the pipeline.
+
+See [`infrastructure/terraform/README.md`](./infrastructure/terraform/README.md)
+for deployment instructions.
 
 ---
 
@@ -129,102 +126,116 @@ for the complete implementation.
 - Frontend: React 18 + Vite + React Router
 - Database: PostgreSQL 16
 
-**DevSecOps**
+**DevSecOps Platform**
 - CI/CD: GitHub Actions
-- Registry: GitHub Container Registry (GHCR)
+- Registries: GitHub Container Registry (GHCR) + Amazon ECR
 - Secret scan: Gitleaks
-- SAST: Semgrep
+- SAST: Semgrep (community + custom rules)
 - Code quality: SonarCloud
 - SCA: Trivy + npm audit
 - Container: Docker + BuildKit
 - Dockerfile lint: Hadolint
-- Image scan: Trivy
-- SBOM: Syft (Anchore)
-- Signing: Cosign (Sigstore)
-- Policy: Conftest / OPA
+- Image scan: Trivy + ECR native
+- SBOM: Syft (Anchore) — SPDX format
+- Signing: Cosign keyless (Sigstore)
+- Policy-as-code: Conftest / OPA (Rego)
+- IaC: Terraform
+- IaC scan: tfsec
 - DAST: OWASP ZAP
-- Monitoring: Prometheus + Grafana
+- Runtime security: Amazon Inspector v2, Amazon GuardDuty
+- Observability: Prometheus + Grafana + CloudWatch
+
+**Cloud (AWS)**
+- Compute: ECS Fargate
+- Database: RDS PostgreSQL
+- Networking: VPC, ALB, WAF, Route 53, ACM
+- Identity: IAM + GitHub OIDC federation
+- Storage: S3
+- Secrets: AWS Secrets Manager
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js 20+
-- Git
+### Local development (without cloud)
 
-### Clone and setup
 ```bash
-git clone https://github.com/<your-org>/securetrack-devsecops.git
-cd securetrack-devsecops
+git clone https://github.com/anlehtouf/AegisFlow-DevSecOps.git
+cd AegisFlow-DevSecOps
 chmod +x scripts/*.sh
 ./scripts/setup.sh
-```
 
-### Run locally
-```bash
-# Full stack (backend + frontend + database)
 cd infrastructure
 docker compose up -d
-
-# With monitoring (Prometheus + Grafana)
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
-### Access
+Access points:
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
-- Health: http://localhost:5000/api/health
-- Metrics: http://localhost:5000/api/metrics
+- Backend: http://localhost:5000
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3001 (admin/admin)
 
-### Default credentials (after seed)
+Default seeded credentials:
 - Admin: `admin@securetrack.local` / `admin123`
 - Reporter: `reporter@securetrack.local` / `reporter123`
+
+### Cloud deployment (AWS)
+
+```bash
+cd infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars   # edit values
+terraform init
+terraform plan
+terraform apply
+```
+
+See [`infrastructure/terraform/README.md`](./infrastructure/terraform/README.md)
+for full instructions including OIDC role setup.
 
 ---
 
 ## Demo Application
 
-**SecureTrack** is an incident reporting and tracking platform with:
-- JWT-based authentication (register/login)
+**SecureTrack** is an incident reporting and tracking platform:
+- JWT-based authentication (register / login)
 - Incident CRUD (create, list, view, update status)
-- Dashboard with statistics (by severity, by status)
-- Role-based access (REPORTER, ADMIN)
+- File attachments via S3 presigned URLs
+- Role-based access (REPORTER, ADMIN, AUDITOR)
+- Audit log of every mutation
 - Health check and Prometheus metrics endpoints
 
-See [docs/architecture.md](./docs/architecture.md) for technical details.
+See [`docs/architecture.md`](./docs/architecture.md) and the
+[class diagram](./docs/diagrams/03-class-diagram.png) for details.
 
 ---
 
-## Vulnerability Demo
+## Vulnerability Catalogue
 
-The application starts with **15 intentional vulnerabilities** (marked `V1`-`V15`
-in source comments). Each is detected by a specific tool in the pipeline:
+The application starts with **15 intentional vulnerabilities** (marked `V1`–`V15`
+in source comments), each detected by a specific tool in the pipeline:
 
-| # | Vulnerability | Detected By | Severity |
-|---|--------------|-------------|----------|
-| V1 | Hardcoded API key | Gitleaks | HIGH |
-| V2 | Hardcoded JWT secret | Gitleaks + Semgrep | HIGH |
-| V3 | SQL injection (raw query) | Semgrep | CRITICAL |
-| V4 | XSS via dangerouslySetInnerHTML | Semgrep | HIGH |
-| V5 | Vulnerable lodash@4.17.20 | Trivy + npm audit | HIGH |
-| V6 | Vulnerable node:16 base image | Trivy image | HIGH/CRIT |
-| V7 | Container runs as root | Hadolint + Conftest | MEDIUM |
-| V8 | No HEALTHCHECK in Dockerfile | Hadolint + Conftest | LOW |
-| V9 | Debug mode in error handler | Semgrep | MEDIUM |
-| V10 | Missing helmet security headers | OWASP ZAP | MEDIUM |
-| V11 | No rate limiting on auth | Semgrep (custom) + ZAP | LOW |
-| V12 | Weak password policy | Semgrep (custom) | MEDIUM |
-| V13 | Password logged to console | Semgrep (custom) | MEDIUM |
-| V14 | CORS wildcard origin | Semgrep (custom) + ZAP | MEDIUM |
-| V15 | Old Express version | Trivy | HIGH |
+| #  | Vulnerability | Detected By | Severity | OWASP Top 10 |
+|----|--------------|-------------|----------|--------------|
+| V1 | Hardcoded API key | Gitleaks | HIGH | A07 |
+| V2 | Hardcoded JWT secret | Gitleaks + Semgrep | HIGH | A02 / A07 |
+| V3 | SQL injection (raw query) | Semgrep | CRITICAL | A03 |
+| V4 | XSS via `dangerouslySetInnerHTML` | Semgrep | HIGH | A03 |
+| V5 | Vulnerable `lodash@4.17.20` | Trivy + npm audit | HIGH | A06 |
+| V6 | Vulnerable `node:16` base image | Trivy image | HIGH/CRIT | A06 |
+| V7 | Container runs as root | Hadolint + Conftest | MEDIUM | A05 |
+| V8 | No HEALTHCHECK in Dockerfile | Hadolint + Conftest | LOW | A05 |
+| V9 | Debug mode in error handler | Semgrep | MEDIUM | A05 |
+| V10 | Missing helmet security headers | OWASP ZAP | MEDIUM | A05 |
+| V11 | No rate limiting on auth | Semgrep (custom) + ZAP | LOW | A07 |
+| V12 | Weak password policy | Semgrep (custom) | MEDIUM | A07 |
+| V13 | Password logged to console | Semgrep (custom) | MEDIUM | A09 |
+| V14 | CORS wildcard origin | Semgrep (custom) + ZAP | MEDIUM | A05 |
+| V15 | Old Express version | Trivy | HIGH | A06 |
 
 ---
 
-## Security Findings — Before vs After
+## Before vs After
 
 | Metric | Before | After | Reduction |
 |--------|--------|-------|-----------|
@@ -241,39 +252,47 @@ in source comments). Each is detected by a specific tool in the pipeline:
 
 ## Documentation
 
-- [Project Blueprint](./PROJECT_BLUEPRINT.md) — Complete project specification (33 sections)
+- [Project Blueprint](./PROJECT_BLUEPRINT.md) — Complete specification (33 sections)
+- [Diagrams](./docs/diagrams/) — MCD + UML pack (8 diagrams)
 - [Architecture](./docs/architecture.md) — Technical architecture
 - [Security Controls](./docs/security-controls.md) — Control inventory
 - [Compliance Mapping](./docs/compliance-mapping.md) — OWASP SAMM, NIST SSDF, ISO 27001
 - [Threat Model](./security/threat-model/threat-model.md) — STRIDE analysis
 - [Runbook](./docs/runbook.md) — Operations guide
+- [Terraform Module](./infrastructure/terraform/README.md) — AWS deployment
 
 ---
 
 ## Repository Structure
 
 ```
-securetrack-devsecops/
-├── .github/workflows/         GitHub Actions CI/CD pipelines
+AegisFlow-DevSecOps/
+├── .github/workflows/          GitHub Actions CI/CD pipelines
 ├── app/
-│   ├── backend/               Node.js + Express API
-│   └── frontend/              React + Vite SPA
+│   ├── backend/                Node.js + Express API
+│   └── frontend/               React + Vite SPA
 ├── security/
-│   ├── gitleaks/              Secret scanning rules
-│   ├── semgrep/               SAST custom rules
-│   ├── trivy/                 Trivy configuration
-│   ├── policies/              OPA/Rego policies
-│   ├── zap/                   ZAP scan config
-│   └── threat-model/          STRIDE threat model
+│   ├── gitleaks/               Secret scanning rules
+│   ├── semgrep/                SAST custom rules
+│   ├── trivy/                  Trivy configuration
+│   ├── policies/               OPA / Rego policies
+│   ├── zap/                    ZAP scan config
+│   └── threat-model/           STRIDE threat model
 ├── infrastructure/
-│   ├── docker-compose.yml     Staging stack
-│   ├── docker-compose.monitoring.yml  Monitoring stack
-│   ├── prometheus/            Prometheus config
-│   └── grafana/               Grafana dashboards
-├── scripts/                   Setup, deploy, health, reporting scripts
-├── docs/                      Architecture, controls, compliance, runbook
-├── evidence/                  Screenshots and scan reports
-├── reports/                   Generated scan outputs (gitignored)
+│   ├── docker-compose.yml      Local staging stack
+│   ├── docker-compose.monitoring.yml
+│   ├── prometheus/
+│   ├── grafana/
+│   └── terraform/              AWS landing zone (IaC)
+├── scripts/                    Setup, deploy, health, reporting
+├── docs/
+│   ├── diagrams/               MCD + UML diagram pack
+│   ├── architecture.md
+│   ├── security-controls.md
+│   ├── compliance-mapping.md
+│   └── runbook.md
+├── evidence/                   Screenshots and scan reports
+├── reports/                    Generated scan outputs (gitignored)
 └── README.md
 ```
 
@@ -281,11 +300,12 @@ securetrack-devsecops/
 
 ## License
 
-MIT — See [LICENSE](./LICENSE) for details.
+MIT — See [LICENSE](./LICENSE).
 
 ---
 
 ## Acknowledgments
 
-Built as an end-of-studies (PFE) project demonstrating production-grade DevSecOps
-practices. Uses exclusively free and open-source tools to ensure full reproducibility.
+Built as an end-of-studies (PFE) project demonstrating production-grade
+DevSecOps practices. Uses exclusively free and open-source tools to ensure
+full reproducibility.

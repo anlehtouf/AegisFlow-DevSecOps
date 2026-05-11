@@ -1,0 +1,33 @@
+# AegisFlow — Example variables
+#
+# Copy this file to terraform.tfvars and edit for your environment.
+# DO NOT commit terraform.tfvars — it is in .gitignore.
+
+project     = "aegisflow"
+environment = "staging"
+owner       = "anlehtouf@gmail.com"
+aws_region  = "eu-west-3"
+
+# Network
+vpc_cidr = "10.0.0.0/16"
+azs      = ["eu-west-3a", "eu-west-3b"]
+
+# Application image
+image_tag      = "latest"
+backend_port   = 5000
+frontend_port  = 3000
+
+# Database
+db_name                 = "securetrack"
+db_username             = "aegisflow_admin"
+db_instance_class       = "db.t4g.micro"
+db_allocated_storage_gb = 20
+db_multi_az             = false
+
+# GitHub OIDC federation
+github_owner            = "anlehtouf"
+github_repo             = "AegisFlow-DevSecOps"
+github_allowed_branches = ["main", "develop", "hardened"]
+
+# Optional: public domain (leave empty to use ALB DNS only)
+domain_name = ""

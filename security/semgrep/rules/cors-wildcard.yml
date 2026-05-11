@@ -1,0 +1,77 @@
+# AegisFlow — Custom Semgrep rule: CORS wildcard origin (V14)
+#
+# Why hand-written:
+# ------------------
+# The community Semgrep registry has rules for "uses cors", but not for the
+# specific anti-pattern of explicitly allowing ANY origin in a production
+# Express app. Public rules tend to be either too noisy (flag every cors() use)
+# or too narrow (miss reflective-origin patterns).
+#
+# This rule catches three real-world variants:
+#   1. cors({ origin: "*" })
+#   2. cors({ origin: true })       — Express interprets `true` as "reflect origin"
+#   3. res.setHeader("Access-Control-Allow-Origin", "*")
+#
+# Verified against the V14 marker in app/backend/src/app.js.
+#
+# References:
+#   - OWASP A05:2021 Security Misconfiguration
+#   - https://portswigger.net/web-security/cors
+
+rules:
+  - id: aegisflow-cors-wildcard-origin
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+      owasp: "A05:2021 Security Misconfiguration"
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      vulnerability_class: CORS Misconfiguration
+      custom_rule: "Authored for AegisFlow PFE — V14"
+      references:
+        - https://portswigger.net/web-security/cors
+        - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+    message: >-
+      CORS is configured to allow ANY origin. This permits cross-origin requests
+      with credentials from arbitrary attacker-controlled sites, breaking the
+      same-origin policy. Replace with an explicit allowlist of trusted origins,
+      e.g. cors({ origin: ['https://app.example.com'], credentials: true }).
+    pattern-either:
+      # Variant 1: cors({ origin: "*" })
+      - pattern: cors({ ..., origin: "*", ... })
+      # Variant 2: cors({ origin: true }) — reflects request origin
+      - pattern: cors({ ..., origin: true, ... })
+      # Variant 3: manual header set to "*"
+      - pattern: $RES.setHeader("Access-Control-Allow-Origin", "*")
+      # Variant 4: app.use(cors()) with no config — defaults to allow-all
+      - patterns:
+          - pattern: $APP.use(cors())
+          - pattern-not: $APP.use(cors({...}))
+    fix-regex:
+      regex: 'cors\(\s*\{[^}]*origin\s*:\s*("\*"|true)[^}]*\}\s*\)'
+      replacement: 'cors({ origin: process.env.ALLOWED_ORIGINS?.split(",") ?? [] })'
+
+  # ---------------------------------------------------------------------------
+  # Companion rule: same misconfig in raw http.ServerResponse / fastify / koa.
+  # Catches the case where someone bypasses cors() entirely and sets the header
+  # by hand — common in middleware files.
+  # ---------------------------------------------------------------------------
+  - id: aegisflow-cors-wildcard-raw-header
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-942"
+      owasp: "A05:2021"
+      custom_rule: "Authored for AegisFlow PFE"
+    message: >-
+      Setting Access-Control-Allow-Origin to "*" by hand bypasses any CORS
+      middleware safeguards. If you need an allowlist, use the cors() package
+      with a function-based origin validator.
+    pattern-either:
+      - pattern: $RES.header("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.set("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.setHeader("access-control-allow-origin", "*")
