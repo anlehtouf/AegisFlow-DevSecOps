@@ -15,7 +15,8 @@ permissions:
 env:
   NODE_VERSION: '20'
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/securetrack-backend
+  # OCI image references must be lowercase; the repository name contains capitals.
+  IMAGE_NAME: anlehtouf/aegisflow-devsecops/securetrack-backend
 
 jobs:
   # ============================================================
