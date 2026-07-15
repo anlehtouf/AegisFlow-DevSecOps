@@ -177,7 +177,7 @@ jobs:
     needs: install
     runs-on: ubuntu-latest
     outputs:
-      findings: ${{ steps.scan.outputs.findings }}
+      findings: ${{ steps.count.outputs.findings }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -188,20 +188,33 @@ jobs:
 
       - name: Run Gitleaks
         id: scan
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: --config=security/gitleaks/.gitleaks.toml --report-format=sarif --report-path=reports/gitleaks-report.sarif
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          docker run --rm \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:v8.30.1 \
+            detect \
+            --source=/repo \
+            --config=/repo/security/gitleaks/.gitleaks.toml \
+            --report-format=sarif \
+            --report-path=/repo/reports/gitleaks-report.sarif \
+            --no-banner
+          SCAN_EXIT=$?
+          set -e
+
+          if [ "$SCAN_EXIT" -gt 1 ]; then
+            echo "Gitleaks scanner error (exit code $SCAN_EXIT)." >&2
+            exit "$SCAN_EXIT"
+          fi
+
+          echo "exit_code=$SCAN_EXIT" >> "$GITHUB_OUTPUT"
 
       - name: Count findings
+        id: count
         if: always()
         run: |
-          if [ -f reports/gitleaks-report.sarif ]; then
-            COUNT=$(jq '[.runs[].results[]] | length' reports/gitleaks-report.sarif)
-          else
-            COUNT=0
-          fi
+          test -s reports/gitleaks-report.sarif
+          COUNT=$(jq '[.runs[].results[]] | length' reports/gitleaks-report.sarif)
           echo "findings=$COUNT" >> $GITHUB_OUTPUT
           echo "### Gitleaks: $COUNT secrets found" >> $GITHUB_STEP_SUMMARY
 
