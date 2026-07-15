@@ -32,7 +32,7 @@ describe('IncidentService', () => {
       ];
       prisma.incident.findMany.mockResolvedValue(mockIncidents);
 
-      const result = await incidentService.list({});
+      const result = await incidentService.list({ viewer: { id: 'admin-1', role: 'ADMIN' } });
 
       expect(prisma.incident.findMany).toHaveBeenCalled();
       expect(result).toHaveLength(2);
@@ -41,7 +41,7 @@ describe('IncidentService', () => {
     it('should filter by status', async () => {
       prisma.incident.findMany.mockResolvedValue([]);
 
-      await incidentService.list({ status: 'OPEN' });
+      await incidentService.list({ status: 'OPEN', viewer: { id: 'admin-1', role: 'ADMIN' } });
 
       expect(prisma.incident.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -53,7 +53,7 @@ describe('IncidentService', () => {
     it('should use safe Prisma filter for search', async () => {
       prisma.incident.findMany.mockResolvedValue([]);
 
-      await incidentService.list({ search: 'test' });
+      await incidentService.list({ search: 'test', viewer: { id: 'admin-1', role: 'ADMIN' } });
 
       expect(prisma.incident.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -63,6 +63,16 @@ describe('IncidentService', () => {
         })
       );
       expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+    });
+
+    it('should scope reporter results to their own incidents', async () => {
+      prisma.incident.findMany.mockResolvedValue([]);
+
+      await incidentService.list({ viewer: { id: 'user-1', role: 'REPORTER' } });
+
+      expect(prisma.incident.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { reportedById: 'user-1' } })
+      );
     });
   });
 
