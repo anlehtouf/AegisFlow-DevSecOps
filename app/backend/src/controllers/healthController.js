@@ -18,7 +18,7 @@ const check = async (_req, res) => {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       database: 'disconnected',
-      error: error.message,
+      error: 'Database connectivity check failed',
     });
   }
 };

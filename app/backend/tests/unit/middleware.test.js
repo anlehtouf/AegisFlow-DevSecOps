@@ -93,4 +93,13 @@ describe('Error Handler', () => {
     const response = res.json.mock.calls[0][0];
     expect(response.stack).toBeUndefined();
   });
+
+  it('should not disclose internal error messages for server failures', () => {
+    const error = new Error('database password leaked');
+    const handler = errorHandler({ debug: false });
+
+    handler(error, {}, res, next);
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Internal Server Error' }));
+  });
 });
