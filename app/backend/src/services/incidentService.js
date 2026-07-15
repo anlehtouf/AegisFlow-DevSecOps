@@ -1,8 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-const list = async ({ status, severity, search }) => {
+const list = async ({ status, severity, search, viewer }) => {
   const where = {};
+  if (viewer.role !== 'ADMIN') where.reportedById = viewer.id;
   if (status) where.status = status;
   if (severity) where.severity = severity;
 

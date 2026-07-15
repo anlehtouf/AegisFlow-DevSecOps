@@ -4,6 +4,9 @@ const app = require('../../src/app');
 
 // Generate a valid token using the environment JWT secret
 const token = jwt.sign({ id: 'user-1', email: 'test@test.com', role: 'REPORTER' }, process.env.JWT_SECRET || 'test-secret-for-ci', { expiresIn: '1h' });
+const otherToken = jwt.sign({ id: 'user-2', email: 'other@test.com', role: 'REPORTER' }, process.env.JWT_SECRET || 'test-secret-for-ci', { expiresIn: '1h' });
+const adminToken = jwt.sign({ id: 'admin-1', email: 'admin@test.com', role: 'ADMIN' }, process.env.JWT_SECRET || 'test-secret-for-ci', { expiresIn: '1h' });
+var mockPrisma;
 
 // Mock Prisma
 jest.mock('@prisma/client', () => {
@@ -11,7 +14,7 @@ jest.mock('@prisma/client', () => {
     { id: 'inc-1', title: 'Test Incident', severity: 'HIGH', status: 'OPEN', reportedBy: { id: 'user-1', name: 'Test', email: 'test@test.com' } },
   ];
 
-  const mockPrisma = {
+  mockPrisma = {
     incident: {
       findMany: jest.fn().mockResolvedValue(mockIncidents),
       findUnique: jest.fn((args) => {
@@ -52,6 +55,11 @@ describe('Incidents API', () => {
 
       expect(res.statusCode).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('should scope reporter queries to the authenticated user', async () => {
+      await request(app).get('/api/incidents').set('Authorization', `Bearer ${token}`);
+      expect(mockPrisma.incident.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { reportedById: 'user-1' } }));
     });
   });
 
@@ -102,16 +110,40 @@ describe('Incidents API', () => {
 
       expect(res.statusCode).toBe(404);
     });
+
+    it('should not disclose another reporter\'s incident', async () => {
+      const res = await request(app).get('/api/incidents/inc-1').set('Authorization', `Bearer ${otherToken}`);
+      expect(res.statusCode).toBe(404);
+    });
   });
 
   describe('GET /api/incidents/stats', () => {
-    it('should return statistics', async () => {
+    it('should forbid reporters from accessing statistics', async () => {
       const res = await request(app)
         .get('/api/incidents/stats')
         .set('Authorization', `Bearer ${token}`);
 
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('should return statistics to administrators', async () => {
+      const res = await request(app)
+        .get('/api/incidents/stats')
+        .set('Authorization', `Bearer ${adminToken}`);
       expect(res.statusCode).toBe(200);
       expect(res.body).toHaveProperty('total');
+    });
+  });
+
+  describe('PATCH /api/incidents/:id', () => {
+    it('should forbid reporters from changing status', async () => {
+      const res = await request(app).patch('/api/incidents/inc-1').set('Authorization', `Bearer ${token}`).send({ status: 'CLOSED' });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('should allow an administrator to change status', async () => {
+      const res = await request(app).patch('/api/incidents/inc-1').set('Authorization', `Bearer ${adminToken}`).send({ status: 'CLOSED' });
+      expect(res.statusCode).toBe(200);
     });
   });
 });

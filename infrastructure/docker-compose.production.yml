@@ -1,0 +1,37 @@
+# Production-oriented hardening overlay.
+# Use with: docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in a protected environment file or secret store}
+    ports: !reset []
+    restart: unless-stopped
+
+  backend:
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in a protected environment file or secret store}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      RUN_SEED: "false"
+    ports: !reset
+      - "127.0.0.1:5000:5000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  frontend:
+    ports: !reset
+      - "127.0.0.1:3000:3000"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped

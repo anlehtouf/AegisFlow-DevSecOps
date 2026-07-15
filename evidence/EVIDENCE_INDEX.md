@@ -1,162 +1,79 @@
-# SecureTrack DevSecOps — Evidence Index
+# AegisFlow Evidence Index
 
-**Project:** Design and Implementation of a Secure DevSecOps CI/CD Pipeline with Automated Vulnerability Scanning
-**Author:** Anas
-**Date:** 2026-04-11
-**Repository:** https://github.com/anlehtouf/pfe-securetrack-devsecops
-
----
-
-## 1. Pipeline Run Evidence
-
-### 1.1 Red Baseline Run (Vulnerable Code — `develop` branch)
-- **URL:** https://github.com/anlehtouf/pfe-securetrack-devsecops/actions/runs/24218315287
-- **Commit:** `43d5acd` — "ci: trigger first full pipeline run"
-- **Result:** FAILURE — security gates blocked deployment
-- **What it proves:** Every scanner correctly detects the 15 planted vulnerabilities
-- **Screenshot location:** `evidence/before-remediation/`
-
-### 1.2 Green Hardened Run (Fixed Code — `hardened` PR to `main`)
-- **URL:** https://github.com/anlehtouf/pfe-securetrack-devsecops/actions/runs/24219743267
-- **Commit:** `a9eff80` — "ci: trigger pipeline on push to main"
-- **Result:** SUCCESS — 16/17 jobs pass (Sign & Push skipped on PRs)
-- **What it proves:** All 15 vulnerabilities were remediated, pipeline goes green
-- **Screenshot location:** `evidence/after-remediation/`
-
-### 1.3 Production Run (Merged to `main` — Sign & Push executes)
-- **URL:** https://github.com/anlehtouf/pfe-securetrack-devsecops/actions/runs/24220718489
-- **Commit:** `9fa2185` — merge commit of PR #1
-- **Result:** SUCCESS — 17/17 jobs pass (including Cosign keyless signing)
-- **What it proves:** Full end-to-end supply chain security: build, scan, sign, push to GHCR
-- **Screenshot location:** `evidence/passed-builds/`
+**Project:** AegisFlow — DevSecOps with a built-in shield
+**Repository:** https://github.com/anlehtouf/AegisFlow-DevSecOps
+**Application:** SecureTrack incident reporting platform
+**Purpose:** Collect proof for the PFE defense — red pipeline, green pipeline, signed artifacts, deployment, observability.
 
 ---
 
-## 2. Security Scanner Evidence
+## Status convention
 
-### 2.1 Gitleaks — Secret Detection
-| Metric | Before | After |
-|--------|--------|-------|
-| Secrets found | **3** | **0** |
-| V1 API key (logger.js:5) | DETECTED | REMEDIATED |
-| V2 JWT secret (auth.js:5) | DETECTED | REMEDIATED |
-| V2 JWT secret (authService.js:53) | DETECTED | REMEDIATED |
-- **Report:** `reports/gitleaks-report.json`
+Each control is labelled **Planned**, **Configured**, **Implemented**, **Executed**, or **Verified with evidence**. Configuration and narrative reports alone do not constitute execution evidence. The current vulnerability status is maintained in [`vulnerability-traceability-matrix.md`](./vulnerability-traceability-matrix.md).
 
-### 2.2 Semgrep — SAST
-| Metric | Before | After |
-|--------|--------|-------|
-| Findings (ERROR) | **1** | **0** |
-| Findings (WARNING) | **5** | **0** |
-| V1 hardcoded API key | DETECTED | REMEDIATED |
-| V2 hardcoded JWT (x2) | DETECTED | REMEDIATED |
-| V11 no rate limit | DETECTED | REMEDIATED |
-| V14 CORS wildcard | DETECTED | REMEDIATED |
-- **Report:** `reports/semgrep-report.json`
+## Local hardening evidence
 
-### 2.3 Trivy (Filesystem) — Dependency Scan
-| Metric | Before | After |
-|--------|--------|-------|
-| CRITICAL CVEs | 0 | 0 |
-| HIGH CVEs | **2** | **0** |
-| lodash@4.17.20 (V5) | DETECTED | UPGRADED to ^4.17.21 |
-- **Report:** `reports/trivy-deps-report.json`
+| ID | Control | Status | Command/result | Artifact |
+| --- | --- | --- | --- | --- |
+| E01 | Backend/frontend tests and coverage | Verified with evidence | `npm run test:coverage`: backend 41/41, frontend 21/21 | [`tests/E01-local-coverage-2026-07-15.md`](./tests/E01-local-coverage-2026-07-15.md) |
 
-### 2.4 Trivy (Image) — Container Scan
-| Metric | Before | After |
-|--------|--------|-------|
-| Base image | node:16 (Debian 10 EOL) | node:20-alpine |
-| CRITICAL CVEs | **16** | **0** |
-| HIGH CVEs | **385** | **~5** (alpine minimal) |
-- **Report:** `reports/trivy-image.json`
+## 1. Evidence Folder Map
 
-### 2.5 Conftest / OPA — Policy-as-Code
-| Metric | Before | After |
-|--------|--------|-------|
-| Policy violations | **2 FAIL + 1 WARN** | **0** |
-| V7 no USER directive | DETECTED | REMEDIATED (USER appuser) |
-| V8 no HEALTHCHECK | DETECTED | REMEDIATED (wget health) |
-| V6 non-minimal base | WARNED | REMEDIATED (alpine) |
-- **Policy file:** `security/policies/dockerfile-policy.rego`
-
-### 2.6 Hadolint — Dockerfile Lint
-| Metric | Before | After |
-|--------|--------|-------|
-| Findings | 0 | 0 |
-- Note: V7/V8 enforced by Conftest, not Hadolint (expected behavior)
-
-### 2.7 SonarCloud — Code Quality
-- **Project:** https://sonarcloud.io/project/overview?id=anlehtouf_pfe-securetrack-devsecops
-- Quality Gate: **PASSED**
-- Bugs: 0 | Vulnerabilities: 17→0 (on new code) | Code Smells: 26
+| Folder | What to place here | Why it matters |
+|---|---|---|
+| `evidence/screenshots/01-red-baseline/` | Failed CI run screenshots (vulnerable branch) | Proves gates block vulnerable code |
+| `evidence/screenshots/02-green-hardened/` | Successful CI run screenshots (hardened branch) | Proves remediation works |
+| `evidence/screenshots/03-deployment/` | `docker compose ps`, `/api/health` 200, app screenshots | Proves the hardened release actually runs |
+| `evidence/screenshots/04-supply-chain/` | SBOM excerpts, `cosign sign` log, `cosign verify` output, Rekor entry | Pending CI supply-chain provenance evidence |
+| `evidence/screenshots/05-observability/` | Grafana security dashboard, Prometheus targets, alert rules | Proves continuous visibility |
+| `evidence/artifacts/` | Small exported reports safe to commit (`.json`, `.spdx.json`, `.sarif`) | Keeps defense evidence reproducible |
 
 ---
 
-## 3. Vulnerability Remediation Summary (V1–V15)
+## 2. Required Defense Evidence
 
-| # | Category | Vulnerability | File | Fix Applied | Scanner |
-|---|----------|---------------|------|-------------|---------|
-| V1 | Secret | Hardcoded API key | logger.js | Removed; use env var | Gitleaks, Semgrep |
-| V2 | Secret | Hardcoded JWT secret | auth.js, authService.js | process.env.JWT_SECRET | Gitleaks, Semgrep |
-| V3 | SQLi | Raw SQL query | incidentService.js | Prisma `contains` filter | Semgrep |
-| V4 | XSS | dangerouslySetInnerHTML | IncidentDetail.jsx | Safe text rendering | Semgrep |
-| V5 | SCA | lodash@4.17.20 | package.json | Upgraded to ^4.17.21 | Trivy |
-| V6 | Container | node:16 (EOL) base image | Dockerfile | node:20-alpine | Trivy image |
-| V7 | Container | No USER directive | Dockerfile | USER appuser | Conftest |
-| V8 | Container | No HEALTHCHECK | Dockerfile | HEALTHCHECK wget | Conftest |
-| V9 | Config | Debug mode enabled | app.js | env-gated (dev only) | Semgrep |
-| V10 | Headers | Missing helmet | app.js | Added helmet() | ZAP (DAST) |
-| V11 | Auth | No rate limiting | authRoutes.js | express-rate-limit | Semgrep |
-| V12 | Auth | Weak password policy | authController.js | Strong regex policy | Semgrep |
-| V13 | Logging | Password in logs | authService.js | Removed from log | Semgrep |
-| V14 | Config | CORS wildcard | app.js | Restricted to env origin | Semgrep |
-| V15 | SCA | Old Express version | package.json | Upgraded to ^4.21.2 | Trivy |
-
----
-
-## 4. Supply Chain Security Evidence
-
-| Component | Evidence |
-|-----------|----------|
-| **SBOM** | Generated by Syft in CI (SPDX format) — artifact: `sbom-spdx.json` |
-| **Image signing** | Cosign keyless via GitHub OIDC — verified in pipeline step |
-| **GHCR** | Image published to `ghcr.io/anlehtouf/pfe-securetrack-devsecops/securetrack-backend` |
-| **Signature verification** | `cosign verify` passes with GitHub OIDC issuer |
+| # | Evidence | Source | Status |
+|---|---|---|---|
+| E1 | Failed baseline CI run | GitHub Actions on `vulnerable` branch | TODO |
+| E2 | Successful hardened CI run | GitHub Actions on `main` | TODO |
+| E3 | Local stack healthy | `docker compose ps` + `/api/health` + frontend 200 | DONE - `evidence/artifacts/E03-local-stack-verification.md` |
+| E4 | Backend SBOM | workflow artifact | TODO |
+| E5 | Frontend SBOM | workflow artifact | TODO |
+| E6 | Cosign backend verify | local terminal | TODO |
+| E7 | Cosign frontend verify | local terminal | TODO |
+| E8 | Rekor transparency log entry | rekor-cli lookup screenshot | TODO |
+| E9 | ZAP baseline report | workflow artifact | TODO |
+| E10 | Custom Semgrep rule blocking V14 | PR check screenshot | TODO |
+| E11 | Grafana security dashboard | local screenshot | TODO |
+| E12 | Conftest policy failures (red) and passes (green) | terminal screenshot | TODO |
+| E13 | Trivy image scan summary (before vs after) | terminal screenshot | TODO |
+| E14 | Branch protection rules on `main` and `develop` | GitHub settings screenshot | TODO |
+| E15 | Pipeline runtime metric (`< 15 min` claim) | GitHub Actions run summary | TODO |
 
 ---
 
-## 5. Observability Evidence
+## 3. Screenshot Naming Convention
 
-| Component | URL | Screenshot location |
-|-----------|-----|---------------------|
-| Grafana Security Dashboard | http://localhost:3001 (uid: securetrack-security) | `evidence/dashboards/` |
-| Grafana API Dashboard | http://localhost:3001 (uid: securetrack-api) | `evidence/dashboards/` |
-| Prometheus Alerts | http://localhost:9090/alerts | `evidence/dashboards/` |
-| Pushgateway Metrics | http://localhost:9091 | `evidence/dashboards/` |
+Use this format so the report is easy to assemble:
 
----
-
-## 6. Test Results
-
-| Suite | Tests | Result |
-|-------|-------|--------|
-| Backend unit tests | 20 | 20/20 PASS |
-| Backend integration tests | 14 | 14/14 PASS |
-| Frontend component tests | 5 | 5/5 PASS |
-| **Total** | **39** | **39/39 PASS** |
+```text
+E01-red-baseline-ci-failed.png
+E02-green-hardened-ci-passed.png
+E03-docker-compose-ps-healthy.png
+E04-cosign-verify-backend.png
+E05-sbom-backend-spdx.png
+E06-rekor-transparency-log.png
+E07-zap-baseline-report.png
+E08-semgrep-v14-blocked.png
+E09-grafana-security-dashboard.png
+E10-branch-protection-main.png
+```
 
 ---
 
-## 7. Key Metrics (Before vs After)
+## 4. What To Say In The Defense
 
-| Metric | Before (Vulnerable) | After (Hardened) | Improvement |
-|--------|---------------------|-------------------|-------------|
-| Hardcoded secrets | 3 | 0 | -100% |
-| SAST findings | 6 | 0 | -100% |
-| Dependency HIGH CVEs | 2 | 0 | -100% |
-| Container CRITICAL CVEs | 16 | 0 | -100% |
-| Container HIGH CVEs | 385 | ~5 | -98.7% |
-| Policy violations | 2 | 0 | -100% |
-| Base image size | ~900MB (node:16) | ~180MB (alpine) | -80% |
-| npm audit vulnerabilities | 2 | 0 | -100% |
-| Pipeline result | BLOCKED | APPROVED | Security gates pass |
+AegisFlow is evaluated through evidence, not claims. Every security control in
+the architecture has a matching artifact: scanner report, local stack artifact, or pending signed image/SBOM item,
+deployment log, or observability screenshot. This makes the project auditable
+and reproducible on any laptop in under 30 minutes.

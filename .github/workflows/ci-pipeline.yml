@@ -15,7 +15,8 @@ permissions:
 env:
   NODE_VERSION: '20'
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/securetrack-backend
+  # OCI image references must be lowercase; the repository name contains capitals.
+  IMAGE_NAME: anlehtouf/aegisflow-devsecops/securetrack-backend
 
 jobs:
   # ============================================================
@@ -177,38 +178,57 @@ jobs:
     needs: install
     runs-on: ubuntu-latest
     outputs:
-      findings: ${{ steps.scan.outputs.findings }}
+      findings: ${{ steps.count.outputs.findings }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Create reports directory
+        run: mkdir -p reports
+
       - name: Run Gitleaks
         id: scan
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: --config=security/gitleaks/.gitleaks.toml --report-format=sarif --report-path=reports/gitleaks-report.sarif
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          docker run --rm \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:v8.30.1 \
+            detect \
+            --source=/repo \
+            --config=/repo/security/gitleaks/.gitleaks.toml \
+            --report-format=sarif \
+            --report-path=/repo/reports/gitleaks-report.sarif \
+            --no-banner
+          SCAN_EXIT=$?
+          set -e
+
+          if [ "$SCAN_EXIT" -gt 1 ]; then
+            echo "Gitleaks scanner error (exit code $SCAN_EXIT)." >&2
+            exit "$SCAN_EXIT"
+          fi
+
+          echo "exit_code=$SCAN_EXIT" >> "$GITHUB_OUTPUT"
 
       - name: Count findings
+        id: count
         if: always()
         run: |
-          if [ -f reports/gitleaks-report.sarif ]; then
-            COUNT=$(jq '[.runs[].results[]] | length' reports/gitleaks-report.sarif)
-          else
-            COUNT=0
-          fi
+          test -s reports/gitleaks-report.sarif
+          COUNT=$(jq '[.runs[].results[]] | length' reports/gitleaks-report.sarif)
           echo "findings=$COUNT" >> $GITHUB_OUTPUT
           echo "### Gitleaks: $COUNT secrets found" >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload SARIF to GitHub Security
+      - name: Verify Gitleaks report
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        run: test -s reports/gitleaks-report.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('reports/gitleaks-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/gitleaks-report.sarif
           category: gitleaks
-        continue-on-error: true
 
       - name: Upload Gitleaks report
         if: always()
@@ -231,38 +251,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Semgrep
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Run Semgrep JSON scan
         run: |
           semgrep scan \
             --config=p/security-audit \
             --config=p/nodejs \
             --config=p/react \
             --config=security/semgrep/.semgrep.yml \
+            --config=security/semgrep/rules \
+            --json \
+            --output=reports/semgrep-report.json \
+            app/
+        continue-on-error: true
+
+      - name: Run Semgrep SARIF scan
+        run: |
+          semgrep scan \
+            --config=p/security-audit \
+            --config=p/nodejs \
+            --config=p/react \
+            --config=security/semgrep/.semgrep.yml \
+            --config=security/semgrep/rules \
             --sarif \
             --output=reports/semgrep-report.sarif \
-            --json \
-            --json-output=reports/semgrep-report.json \
             app/
         continue-on-error: true
 
       - name: Count high/critical findings
         id: count
         run: |
-          if [ -f reports/semgrep-report.json ]; then
-            HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' reports/semgrep-report.json)
-          else
-            HIGH=0
-          fi
+          test -s reports/semgrep-report.json
+          HIGH=$(jq '[.results[] | select(.extra.severity == "ERROR" or .extra.severity == "WARNING")] | length' reports/semgrep-report.json)
           echo "high_count=$HIGH" >> $GITHUB_OUTPUT
           echo "### Semgrep: $HIGH high/critical findings" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('reports/semgrep-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/semgrep-report.sarif
           category: semgrep
-        continue-on-error: true
 
       - name: Upload Semgrep reports
         if: always()
@@ -280,7 +311,7 @@ jobs:
     name: Code Quality (SonarCloud)
     needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
-    # Non-blocking: SonarCloud is informational — pipeline continues on failure
+    # Non-blocking: SonarCloud is informational - pipeline continues on failure
     continue-on-error: true
     outputs:
       quality_gate: ${{ steps.gate.outputs.status }}
@@ -319,6 +350,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       critical: ${{ steps.count.outputs.critical }}
+      high: ${{ steps.count.outputs.high }}
+      npm_critical: ${{ steps.npm_audit.outputs.critical }}
+      npm_high: ${{ steps.npm_audit.outputs.high }}
     steps:
       - uses: actions/checkout@v4
 
@@ -331,20 +365,30 @@ jobs:
           output: 'reports/trivy-deps-report.json'
           severity: 'CRITICAL,HIGH'
 
-      - name: Count critical findings
+      - name: Count dependency findings
         id: count
         run: |
-          if [ -f reports/trivy-deps-report.json ]; then
-            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' reports/trivy-deps-report.json)
-          else
-            CRITICAL=0
-          fi
+          test -s reports/trivy-deps-report.json
+          CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' reports/trivy-deps-report.json)
+          HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' reports/trivy-deps-report.json)
           echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-          echo "### Trivy Deps: $CRITICAL critical vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "### Trivy Deps: $CRITICAL critical, $HIGH high vulnerabilities" >> $GITHUB_STEP_SUMMARY
 
       - name: Run npm audit
+        id: npm_audit
         working-directory: app/backend
-        run: npm audit --audit-level=high --json > ../../reports/npm-audit-report.json || true
+        run: |
+          set +e
+          npm audit --json > ../../reports/npm-audit-report.json
+          AUDIT_EXIT=$?
+          set -e
+          test -s ../../reports/npm-audit-report.json
+          CRITICAL=$(jq '.metadata.vulnerabilities.critical // 0' ../../reports/npm-audit-report.json)
+          HIGH=$(jq '.metadata.vulnerabilities.high // 0' ../../reports/npm-audit-report.json)
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "### npm audit: $CRITICAL critical, $HIGH high vulnerabilities (audit exit: $AUDIT_EXIT)" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload dependency reports
         uses: actions/upload-artifact@v4
@@ -358,14 +402,14 @@ jobs:
   # SECURITY GATE #1: Source & Code Checks
   # ============================================================
   security-gate-1:
-    name: Security Gate 1 — Source & Code
+    name: Security Gate 1 - Source & Code
     needs: [secret-scan, sast, sonar, dependency-scan, lint, test-backend]
     if: always() && needs.secret-scan.result == 'success' && needs.sast.result == 'success' && needs.dependency-scan.result == 'success' && needs.lint.result == 'success' && needs.test-backend.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate Gate 1
         run: |
-          echo "## Security Gate #1 — Source & Code" >> $GITHUB_STEP_SUMMARY
+          echo "## Security Gate #1 - Source & Code" >> $GITHUB_STEP_SUMMARY
           PASS=true
 
           # Check secrets
@@ -391,16 +435,19 @@ jobs:
           if [ "$SONAR_RESULT" = "success" ]; then
             echo "| SonarCloud | PASS | Quality gate passed |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| SonarCloud | WARN | Informational only (not blocking) — result: $SONAR_RESULT |" >> $GITHUB_STEP_SUMMARY
+            echo "| SonarCloud | WARN | Informational only (not blocking) - result: $SONAR_RESULT |" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Check dependencies
-          DEPS="${{ needs.dependency-scan.outputs.critical }}"
-          if [ "$DEPS" != "0" ] && [ -n "$DEPS" ]; then
-            echo "| Dep Scan | FAIL | $DEPS critical CVEs |" >> $GITHUB_STEP_SUMMARY
+          DEPS_CRITICAL="${{ needs.dependency-scan.outputs.critical }}"
+          DEPS_HIGH="${{ needs.dependency-scan.outputs.high }}"
+          NPM_CRITICAL="${{ needs.dependency-scan.outputs.npm_critical }}"
+          NPM_HIGH="${{ needs.dependency-scan.outputs.npm_high }}"
+          if [ "$DEPS_CRITICAL" != "0" ] || [ "$DEPS_HIGH" != "0" ] || [ "$NPM_CRITICAL" != "0" ] || [ "$NPM_HIGH" != "0" ] || [ -z "$DEPS_CRITICAL" ] || [ -z "$DEPS_HIGH" ] || [ -z "$NPM_CRITICAL" ] || [ -z "$NPM_HIGH" ]; then
+            echo "| Dependency scans | FAIL | Trivy: $DEPS_CRITICAL critical / $DEPS_HIGH high; npm: $NPM_CRITICAL critical / $NPM_HIGH high |" >> $GITHUB_STEP_SUMMARY
             PASS=false
           else
-            echo "| Dep Scan | PASS | 0 critical |" >> $GITHUB_STEP_SUMMARY
+            echo "| Dependency scans | PASS | 0 critical/high findings |" >> $GITHUB_STEP_SUMMARY
           fi
 
           if [ "$PASS" = "false" ]; then
@@ -610,13 +657,13 @@ jobs:
   # SECURITY GATE #2: Container Security
   # ============================================================
   security-gate-2:
-    name: Security Gate 2 — Container
+    name: Security Gate 2 - Container
     needs: [image-scan, hadolint, policy-check, sbom]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate Gate 2
         run: |
-          echo "## Security Gate #2 — Container" >> $GITHUB_STEP_SUMMARY
+          echo "## Security Gate #2 - Container" >> $GITHUB_STEP_SUMMARY
           PASS=true
 
           IMAGE_CRITICAL="${{ needs.image-scan.outputs.critical }}"
