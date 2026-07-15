@@ -183,6 +183,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Create reports directory
+        run: mkdir -p reports
+
       - name: Run Gitleaks
         id: scan
         uses: gitleaks/gitleaks-action@v2
@@ -202,9 +205,13 @@ jobs:
           echo "findings=$COUNT" >> $GITHUB_OUTPUT
           echo "### Gitleaks: $COUNT secrets found" >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload SARIF to GitHub Security
+      - name: Verify Gitleaks report
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        run: test -s reports/gitleaks-report.sarif
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && hashFiles('reports/gitleaks-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/gitleaks-report.sarif
           category: gitleaks
@@ -230,7 +237,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Semgrep
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Run Semgrep JSON scan
+        run: |
+          semgrep scan \
+            --config=p/security-audit \
+            --config=p/nodejs \
+            --config=p/react \
+            --config=security/semgrep/.semgrep.yml \
+            --config=security/semgrep/rules \
+            --json \
+            --output=reports/semgrep-report.json \
+            app/
+        continue-on-error: true
+
+      - name: Run Semgrep SARIF scan
         run: |
           semgrep scan \
             --config=p/security-audit \
@@ -240,8 +263,6 @@ jobs:
             --config=security/semgrep/rules \
             --sarif \
             --output=reports/semgrep-report.sarif \
-            --json \
-            --json-output=reports/semgrep-report.json \
             app/
         continue-on-error: true
 
@@ -254,12 +275,11 @@ jobs:
           echo "### Semgrep: $HIGH high/critical findings" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('reports/semgrep-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: reports/semgrep-report.sarif
           category: semgrep
-        continue-on-error: true
 
       - name: Upload Semgrep reports
         if: always()
