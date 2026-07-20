@@ -11,8 +11,6 @@
 [![SBOM](https://img.shields.io/badge/SBOM-SPDX-orange)]()
 [![Cloud](https://img.shields.io/badge/cloud-AWS-ff9900)]()
 [![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC)]()
-[![License](https://img.shields.io/badge/license-MIT-yellow)](./LICENSE)
-
 ---
 
 ## Why AegisFlow
@@ -44,8 +42,6 @@ deployment until each is remediated, producing a measurable
 - [Before vs After](#before-vs-after)
 - [Documentation](#documentation)
 - [Repository Structure](#repository-structure)
-- [License](#license)
-
 ---
 
 ## Architecture
@@ -295,17 +291,3 @@ AegisFlow-DevSecOps/
 ├── reports/                    Generated scan outputs (gitignored)
 └── README.md
 ```
-
----
-
-## License
-
-MIT — See [LICENSE](./LICENSE).
-
----
-
-## Acknowledgments
-
-Built as an end-of-studies (PFE) project demonstrating production-grade
-DevSecOps practices. Uses exclusively free and open-source tools to ensure
-full reproducibility.
